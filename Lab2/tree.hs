@@ -1,6 +1,7 @@
 import Data.Char
 
 data Tree generic_type = Empty | Node generic_type (Tree generic_type) (Tree generic_type) deriving (Eq, Ord, Read, Show)
+data ETree generic_type = EEmpty | ENode generic_type generic_type (ETree generic_type) (ETree generic_type) deriving (Eq, Ord, Read, Show)
 notBalancedTree = Node 1 Empty (Node 2 Empty (Node 3 Empty (Node 4 Empty Empty)))
 
 toString Empty =
@@ -152,3 +153,60 @@ remove element (Node value left right)
 		= Node value (remove element left) right
 	|value < element
 		= Node value left (remove element right)
+
+------------------------------------------------------------
+
+getLevel _ Empty = []
+getLevel level (Node value left right)
+	|level == 1
+		= [value]
+	|level > 1
+		= getLevel (level - 1) left ++ getLevel (value - 1) right
+	|otherwise
+		= []
+
+getOrder Empty = []
+getOrder (Node value left right) =
+	zip (lvr (Node value left right)) [1..(nnodes (Node value left right))]
+
+absoluteHeight Empty _ = 0
+absoluteHeight (Node value left right) (Node rootValue rootLeft rootRight) =
+	height (Node rootValue rootLeft rootRight) - height (Node value left right) + 1
+
+makeLayoutHelper Empty _ _ = []
+makeLayoutHelper (Node value left right) root count =
+	--[(x,y)| y <- [1..(nnodes (Node value left right))], x <- getLevel y (Node value left right)]
+	[(x,y)] ++ (makeLayoutHelper left root (count+1)) ++ (makeLayoutHelper right root (count+1))
+	where
+		x = count
+		y = absoluteHeight (Node value left right) root
+
+makeLayout root =
+	makeLayoutHelper root root 1
+
+enumerateLevelHelper Empty _ =
+	EEmpty
+enumerateLevelHelper (Node value left right) root =	
+	(ENode value level (enumerateLevelHelper left root) (enumerateLevelHelper right root))
+	where
+		level = absoluteHeight (Node value left right) root
+
+enumerateLevel tree =
+	enumerateLevelHelper tree tree
+
+
+dumpNode Empty =
+	""
+dumpNode (Node value _ _) =
+	show value
+dumpNodes (Node v Empty Empty) =
+	""
+dumpNodes (Node value left Empty) =
+	(show value) ++ "->" ++ (dumpNode left) ++ "\n" ++ (dumpNodes left)
+dumpNodes (Node value Empty right) =
+	(show value) ++ "->" ++ (dumpNode right) ++ "\n" ++ (dumpNodes right)
+dumpNodes (Node value left right) =
+	(show value) ++ "->" ++ (dumpNode left) ++ "\n" ++ (show value) ++ "->" ++ (dumpNode right) ++ "\n" ++ (dumpNodes left) ++ (dumpNodes right)
+
+dumpDOT (Node value left right) =
+	"digraph G {\n"++ dumpNodes (Node value left right) ++"}\n"
