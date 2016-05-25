@@ -1,7 +1,10 @@
+
 import Data.Char
 
-data Tree generic_type = Empty | Node generic_type (Tree generic_type) (Tree generic_type) deriving (Eq, Ord, Read, Show)
+data Tree generic_type = Empty | Node generic_type (Tree generic_type) (Tree generic_type) deriving (Eq, Ord, Read)--, Show)
 data ETree generic_type = EEmpty | ENode generic_type generic_type (ETree generic_type) (ETree generic_type) deriving (Eq, Ord, Read, Show)
+data STree generic_type = SEmpty | SLeaf generic_type | SBranch generic_type (STree generic_type) (STree generic_type) deriving (Eq, Ord, Read, Show)
+
 notBalancedTree = Node 1 Empty (Node 2 Empty (Node 3 Empty (Node 4 Empty Empty)))
 
 toString Empty =
@@ -154,7 +157,7 @@ remove element (Node value left right)
 	|value < element
 		= Node value left (remove element right)
 
-------------------------------------------------------------
+--Lab3------------------------------------------------------
 
 getLevel _ Empty = []
 getLevel level (Node value left right)
@@ -194,7 +197,6 @@ enumerateLevelHelper (Node value left right) root =
 enumerateLevel tree =
 	enumerateLevelHelper tree tree
 
-
 dumpNode Empty =
 	""
 dumpNode (Node value _ _) =
@@ -210,3 +212,25 @@ dumpNodes (Node value left right) =
 
 dumpDOT (Node value left right) =
 	"digraph G {\n"++ dumpNodes (Node value left right) ++"}\n"
+
+--Lab4------------------------------------------------------
+
+instance Show tree => Show (Tree tree) where
+	show Empty = 
+		"Empty"
+	show (Node value left right) = 
+		"(L: " ++ show left ++ ", V: " ++ show value ++ ", R: " ++ show right ++ ")"
+
+toSTree Empty =
+	SEmpty
+toSTree (Node value Empty Empty) =
+	(SLeaf value)
+toSTree (Node value left right) =
+	(SBranch value (toSTree left) (toSTree right))
+
+fromSTree SEmpty =
+	Empty
+fromSTree (SLeaf value) =
+	(Node value Empty Empty)
+fromSTree (SBranch value left right) =
+	(Node value (fromSTree left) (fromSTree right))
