@@ -260,18 +260,74 @@ zwrocPozycjeGracza gracz@(Gracz markerGracza) plansza =
 		kolorPasuje pozycja = marker == podstawowyMarker (markerNaPozycji (zwrocMarkery plansza) pozycja)
 		pozycje = filter kolorPasuje $ pozycjePlanszy plansza
 
-zwrocMozliweRuchyGracza :: StanGry -> [Ruch]
-zwrocMozliweRuchyGracza stan@(StanGry plansza _) =
+zwrocMozliweRuchyStanu :: StanGry -> [Ruch]
+zwrocMozliweRuchyStanu stan@(StanGry plansza _) =
 	ruchy where
 		ruchy = concat $ map (zwrocMozliweRuchy stan) pozycje
 		pozycje = pozycjePlanszy plansza
 
---zwrocMozliweRuchyGry :: Gra -> [Ruch]
---zwrocMozliweRuchyGry (Gra stan _) =
---	zwrocMozliweRuchyGracza
+zwrocMozliweRuchyGry :: Gra -> [Ruch]
+zwrocMozliweRuchyGry (Gra stan _) =
+	zwrocMozliweRuchyStanu stan
+
+-- zwraca prawde, jezeli ruch jest skokiem
+sprawdzSkok :: Ruch -> Bool
+sprawdzSkok (Ruch (_, yStart) (_, yKoniec)) =
+	roznica > 1 where
+		roznica = abs $ yStart - yKoniec
+
+zwrocWspolrzedneSkoku :: Ruch -> Pozycja
+zwrocWspolrzedneSkoku (Ruch (xStart, yStart) (xKoniec, yKoniec)) =
+	nowaPozycja where
+		nowaPozycja = (xStart+roznicaKolumn, yStart+roznicaWierszy)
+		roznicaKolumn = if xStart < xKoniec
+			then 1
+			else -1
+		roznicaWierszy = if yStart < yKoniec
+			then 1
+			else -1
+
+-- zamienia noramlny marker na damke
+rozszerzonyMarker :: Marker -> Marker
+rozszerzonYMarker Czarny =
+	Damka Czarny
+rozszerzonyMarker Bialy =
+	Damka Bialy
+rozszerzonyMarker marker = marker
+
+-- zamienia pionekna podanej pozycji na damke
+zamienNaDamke :: StanGry -> Pozycja -> StanGry
+zamienNaDamke stan pozycja =
+	nowyStan where
+		nowyStan = zmienPozycjeStanu stan pozycja damka
+		damka = rozszerzonyMarker $ zwrocMarkerStanu stan pozycja
+
+-- sprawdza, czy pionek na podanej pozycji powienien byc damka
+czyDamka :: Marker -> Pozycja -> Bool
+czyDamka (Damka _) _ =
+	False
+czyDamka Czarny (_, 8) =
+	True
+czyDamka Bialy (_, 1) =
+	True
+czyDamka _ _ =
+	False
+
+wykonajRuch :: Gra -> Ruch -> Gra
+wykonajRuch (Gra aktualnyStan gracze) ruch@(Ruch staraPozycja nowaPozycja) =
+	nowaGra where
+		nowaGra = Gra stan3 gracze
+		stan1 = aktualizujStan aktualnyStan staraPozycja nowaPozycja
+		stan2 = if sprawdzSkok ruch
+			then wymazPozycje stan1 (zwrocWspolrzedneSkoku ruch)
+			else stan1
+		stan3 = if czyDamka (zwrocMarkerStanu stan2 nowaPozycja) nowaPozycja
+			then zamienNaDamke stan2 nowaPozycja
+			else stan2
 
 -------------------------------------------------------------------
 
+-- ustanawia poczatkowy wyglad gry
 poczatekGry :: Gra
 poczatekGry =
 	Gra stanPoczatkowy [Gracz Czarny, Gracz Bialy] where
@@ -285,3 +341,45 @@ poczatkowaPlansza = startowaPlansza where
 	czarnePola = generujPozycje [1..3]
 	bialePola = generujPozycje [6..8]
 	generujPozycje wiersze = [(x, y) | x <- [1..8], y <- wiersze, or [and [even x, even y], and [odd x, odd y]]]
+
+graj :: Gra -> IO()
+graj gra =
+	do
+		if not (koniecGry gra)
+			then kontynuuj
+			else zakoncz
+		where
+			mozliweRuchy = zwrocMozliweRuchyGry gra
+			czyPoprawnyRuch ruch = ruch `elem` mozliweRuchy
+			kontynuuj =
+				do
+					putStrLn $ show gra
+					putStrLn $ "Mozliwe ruchy:\n" ++ (show mozliweRuchy) ++ "\nPodaj swoj ruch jako: \"Ruch (poczatkowaKolumna, poczatkowyWiersz) (koncowaKolumna, koncowyWiersz)\" lub \"wyjscie\" w celu zakonczenia"
+					wejscie <- getLine
+					if wejscie == "wyjscie"
+						then putStrLn "Koncze gre..."
+					else if czyPoprawnyRuch (przekonwertuj wejscie)
+						then
+							do
+								putStrLn $ "Wykonywanie ruchu " ++ wejscie
+								graj (wykonajWczytanyRuch gra wejscie)
+						else putStrLn $ wejscie ++ " nie jest poprawnym ruchem"
+			zakoncz =
+				do
+					putStrLn $ "Koniec gry. Stan koncowy:\n" ++ show gra
+					putStrLn $ "Wygral: " ++ show (ktoWygral gra)	++ "\n"
+
+przekonwertuj :: String -> Ruch
+przekonwertuj wejscie =
+	read wejscie :: Ruch
+
+wykonajWczytanyRuch :: Gra -> String -> Gra
+wykonajWczytanyRuch gra wejscie =
+	wykonajRuch gra (przekonwertuj wejscie)
+
+main :: IO()
+main =
+	do
+		putStrLn "Warcaby\n"
+		graj poczatekGry
+	
