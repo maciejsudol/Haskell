@@ -6,7 +6,7 @@ import Data.Map (Map)			-- tylko map
 
 data Gracz = Gracz Marker deriving (Show, Eq)
 data Gra = Gra StanGry [Gracz] deriving (Show, Eq)
-data Plansza = Plansza Rozmiar PozycjePionkow deriving (Show, Eq)
+data Plansza = Plansza Rozmiar PozycjePionkow deriving (Eq)
 data StanGry = StanGry Plansza Gracz deriving (Show, Eq)
 data Marker = Brak | Czarny | Bialy | Damka Marker deriving (Show, Eq)
 data Ruch = Ruch Pozycja Pozycja deriving (Show, Eq, Read)
@@ -17,15 +17,27 @@ type PozycjePionkow = Map Pozycja Marker
 
 -------------------------------------------------------------------
 
---instance Show
+instance Show Plansza where
+	show plansza@(Plansza (szerokosc, _) pozycje) =
+		polacz wiersze where
+			polacz = foldr (\p1 p2 -> p2 ++ ('\n':p1)) ""
+			pozycjeNaPlanszy = pozycjePlanszy plansza
+			markery = concat $ map (\p -> markerString $ pozycje Map.! p) pozycjeNaPlanszy
+			wiersze = numerKolumny 8 $ numerWiersza 1 $ podzielNaKawalki szerokosc markery
+			numerKolumny licznik wartosci = wartosci ++ ["  " ++ (foldr (\p1 p2 -> p2 ++ show p1) "" (reverse [1..licznik]))]
+			numerWiersza poczatek (glowa:ogon) = (show poczatek++ " " ++ glowa) : numerWiersza (poczatek+1) ogon
+			numerWiersza _ [] = []
+			podzielNaKawalki _ [] = []
+			podzielNaKawalki dzielnik wartosci = czesc1 : podzielNaKawalki dzielnik czesc2 where
+				(czesc1, czesc2) = splitAt dzielnik wartosci
 
 markerString :: Marker -> String
 markerString marker = case marker of
-	Brak	-> "_"
-	Czarny	-> "b"
-	Bialy	-> "w"
-	Damka Czarny	-> "B"
-	Damka Bialy	-> "W"
+	Brak	-> "-"
+	Czarny	-> "c"
+	Bialy	-> "b"
+	Damka Czarny	-> "C"
+	Damka Bialy	-> "B"
 
 -------------------------------------------------------------------
 
@@ -331,7 +343,7 @@ wykonajRuch (Gra aktualnyStan gracze) ruch@(Ruch staraPozycja nowaPozycja) =
 poczatekGry :: Gra
 poczatekGry =
 	Gra stanPoczatkowy [Gracz Czarny, Gracz Bialy] where
-		stanPoczatkowy = StanGry poczatkowaPlansza $ Gracz Czarny
+		stanPoczatkowy = StanGry poczatkowaPlansza $ Gracz Bialy
 
 poczatkowaPlansza :: Plansza
 poczatkowaPlansza = startowaPlansza where
@@ -363,7 +375,10 @@ graj gra =
 							do
 								putStrLn $ "Wykonywanie ruchu " ++ wejscie
 								graj (wykonajWczytanyRuch gra wejscie)
-						else putStrLn $ wejscie ++ " nie jest poprawnym ruchem"
+						else 
+							do
+								putStrLn $ wejscie ++ " nie jest poprawnym ruchem"
+								kontynuuj
 			zakoncz =
 				do
 					putStrLn $ "Koniec gry. Stan koncowy:\n" ++ show gra
