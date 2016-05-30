@@ -366,7 +366,7 @@ graj gra =
 			kontynuuj =
 				do
 					putStrLn $ show gra
-					putStrLn $ "Mozliwe ruchy:\n" ++ (show mozliweRuchy) ++ "\nPodaj swoj ruch jako: \"Ruch (poczatkowaKolumna, poczatkowyWiersz) (koncowaKolumna, koncowyWiersz)\" lub \"wyjscie\" w celu zakonczenia"
+					putStrLn $ "Mozliwe ruchy:\n" ++ (show mozliweRuchy) ++ "\nPodaj swoj ruch jako: \"Ruch (poczatkowyWiersz, poczatkowaKolumna) (koncowyWiersz, koncowaKolumna)\" lub \"wyjscie\" w celu zakonczenia"
 					wejscie <- getLine
 					if wejscie == "wyjscie"
 						then putStrLn "Koncze gre..."
