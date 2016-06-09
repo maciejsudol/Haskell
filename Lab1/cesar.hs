@@ -19,5 +19,5 @@ encode::Int -> String -> String
 encode n s = map (shiftPos n) s	-- map aplikuje podana funkcje do kazdego elementu listy
 decode s n = map (shiftPos ((length helper) - n)) s 
 
-https://gist.github.com/lashleigh/796430
+--https://gist.github.com/lashleigh/796430
 
