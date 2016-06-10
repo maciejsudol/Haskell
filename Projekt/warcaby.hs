@@ -1,5 +1,6 @@
 import qualified Data.Map as Map	-- importujemy map i nadajemy jej kwalifikator
-import Data.Map (Map)				-- tylko map
+import Data.Map (Map)			-- tylko map
+import Data.List
 
 -------------------------------------------------------------------
 
@@ -21,22 +22,22 @@ instance Show Plansza where
 		polacz wiersze where
 			polacz = foldr (\p1 p2 -> p2 ++ ('\n':p1)) ""
 			pozycjeNaPlanszy = pozycjePlanszy plansza
-			kolory = concat $ map (\p -> kolorChar $ pozycje Map.! p) pozycjeNaPlanszy	-- Map.! znajduje wartość na zadanej pozycji
-			wiersze = numeracjaKolumny szerokosc $ numeracjaWiersza 1 $ podzielNaKawalki (2*szerokosc) kolory
+			pionki = concat $ map (\p -> kolorChar $ pozycje Map.! p) pozycjeNaPlanszy	-- Map.! znajduje wartość na zadanej pozycji
+			wiersze = numeracjaKolumny szerokosc $ numeracjaWiersza 1 $ podzielNaKawalki (2*szerokosc) pionki
 			numeracjaKolumny licznik wartosci = wartosci ++ ["  " ++ (foldr (\p1 p2 -> p2 ++ show p1 ++ " ") "" (reverse [1..licznik]))]
 			numeracjaWiersza _ [] = []
 			numeracjaWiersza licznik (glowa:ogon) = (show licznik ++ " " ++ glowa) : numeracjaWiersza (licznik+1) ogon
 			podzielNaKawalki _ [] = []
-			podzielNaKawalki dzielnik kolory = czesc1 : podzielNaKawalki dzielnik czesc2
+			podzielNaKawalki dzielnik pionki = czesc1 : podzielNaKawalki dzielnik czesc2
 				where
-					(czesc1, czesc2) = splitAt dzielnik kolory
+					(czesc1, czesc2) = splitAt dzielnik pionki
 
 kolorChar :: Kolor -> String
 kolorChar kolor = case kolor of
 	Brak			-> "- "
 	Czarny			-> "c "
 	Bialy			-> "b "
-	Damka Czarny	-> "C "
+	Damka Czarny		-> "C "
 	Damka Bialy		-> "B "
 
 -------------------------------------------------------------------
@@ -54,33 +55,39 @@ podstawowyKolor kolor = case kolor of
 	(Damka kolorDamki)	-> podstawowyKolor kolorDamki
 	_					-> kolor
 
-zwrocKolory :: Plansza -> PozycjePionkow
-zwrocKolory (Plansza _ kolory) =
-	kolory
+zwrocPozycje :: Plansza -> PozycjePionkow
+zwrocPozycje (Plansza _ pozycje) =
+	pozycje
 
 -- aktualizuje kolory
 zamienKolory :: Plansza -> PozycjePionkow -> Plansza
 zamienKolory (Plansza rozmiar _) noweKolory =
 	(Plansza rozmiar noweKolory)
 
--- aktualizuje pozycje kolora na planszy
+zamienKolor :: Kolor -> Kolor
+zamienKolor kolor = case kolor of
+	(Damka kolorDamki)	-> zamienKolor kolorDamki
+	Bialy				-> Czarny
+	Czarny				-> Bialy
+	_					-> kolor
+
+-- aktualizuje pozycje pionka na planszy
 aktualizujPlansze :: Plansza -> Pozycja -> Kolor -> Plansza
 aktualizujPlansze plansza pozycja kolor =
 	nowaPlansza where
-		stareKolory = zwrocKolory plansza
+		stareKolory = zwrocPozycje plansza
 		noweKolory = Map.insert pozycja kolor stareKolory
 		nowaPlansza = zamienKolory plansza noweKolory
 
 koniecGry :: Gra -> Bool
 koniecGry (Gra (StanGry plansza _) _) =
 	any (wygral plansza) [Bialy, Czarny] where
-
 		wygral :: Plansza -> Kolor -> Bool
 		wygral _ Brak = False
 		wygral plansza (Damka kolor) = wygral plansza kolor
-		wygral (Plansza _ kolory) kolor =
+		wygral (Plansza _ pozycje) kolor =
 			not istniejeInnyKolor where
-				istniejeInnyKolor = any (funkcja innyKolor) (Map.elems kolory)
+				istniejeInnyKolor = any (funkcja innyKolor) (Map.elems pozycje)
 				innyKolor = podstawowyKolor kolor
 				funkcja kolor1 kolor2 = podstawowyKolor kolor1 == kolor2
 
@@ -93,20 +100,10 @@ ktoWygral gra@(Gra (StanGry plansza (Gracz kolor)) _) =
 				else Bialy
 		else Brak
 
--- zamienia dana pozycje z podanym argumentem
-zmienPozycjeStanu :: StanGry -> Pozycja -> Kolor -> StanGry
-zmienPozycjeStanu (StanGry staraPlansza gracz) pozycja kolor =
-	(StanGry nowaPlansza gracz) where
-		nowaPlansza = aktualizujPlansze staraPlansza pozycja kolor
-
-zwrocKolorStanu :: StanGry -> Pozycja -> Kolor
-zwrocKolorStanu (StanGry plansza _) pozycja =
-	kolorNaPozycji (zwrocKolory plansza) pozycja
-
 -- sprawdza, czy zadana pozycja jest pusta
 pustaPozycja :: Plansza -> Pozycja -> Bool
 pustaPozycja plansza pozycja =
-	(kolorNaPozycji (zwrocKolory plansza) pozycja) == Brak
+	(kolorNaPozycji (zwrocPozycje plansza) pozycja) == Brak
 
 -- sprawdza, czy nowa zadana pozycja jest prawidlowa
 wGranicach :: Plansza -> Pozycja -> Bool
@@ -115,91 +112,101 @@ wGranicach plansza@(Plansza (szerokoscPlanszy, wysokoscPlanszy) _) pozycja@(x, y
 
 -- zwraca mozliwe ruchy o jedna pozycje, bez zbijania innych pionkow
 prostyRuch :: Plansza -> Pozycja -> [Pozycja]
-prostyRuch plansza pozycja =
+prostyRuch plansza pozycja@(x,y) =
 	filter (prawidlowaPozycja plansza) (mozliweProsteRuchy kolor) where
+		kolor = kolorNaPozycji (zwrocPozycje plansza) pozycja
+
 		mozliweProsteRuchy :: Kolor -> [Pozycja]
-		mozliweProsteRuchy (Damka _) = mozliweProsteRuchy Czarny ++ mozliweProsteRuchy Bialy
-		mozliweProsteRuchy Czarny = [(x-1, y+1), (x+1, y+1)]
-		mozliweProsteRuchy Bialy = [(x-1, y-1), (x+1, y-1)]
-		mozliweProsteRuchy _ = []
-		(x, y) = pozycja
-		kolor = kolorNaPozycji (zwrocKolory plansza) pozycja
+		mozliweProsteRuchy kolor = case kolor of
+			(Damka _)	-> mozliweProsteRuchy Czarny ++ mozliweProsteRuchy Bialy
+			Czarny 		-> [(x-1, y+1), (x+1, y+1)]
+			Bialy 		-> [(x-1, y-1), (x+1, y-1)]
+			_		-> []
 
 		prawidlowaPozycja :: Plansza -> Pozycja -> Bool
 		prawidlowaPozycja plansza pozycja =
 			(pustaPozycja plansza pozycja) && (wGranicach plansza pozycja)
 
--- sprawdza, czy wykonywany ruch odbedzie sie w prawidlowym kierunku
-prawidlowyKierunek :: Kolor -> Pozycja -> Pozycja -> Bool
-prawidlowyKierunek Czarny (_, y1) (_, y2) =
-	y1 < y2
-prawidlowyKierunek Bialy (_, y1) (_, y2) =
-	y1 > y2
-
-zamienKolor :: Kolor -> Kolor
-zamienKolor kolor = case kolor of
-	(Damka kolorDamki)	-> zamienKolor kolorDamki
-	Bialy				-> Czarny
-	Czarny				-> Bialy
-	_					-> kolor
-
 -- zwraca mozliwe skoki na zadanej planszy dla pionka z podanej pozycji
 skok :: Plansza -> Pozycja -> [Pozycja]
-skok plansza pozycja =
+skok plansza@(Plansza (szerokosc, wysokosc) _) pozycja =
 	skoki where
-		kolor = kolorNaPozycji (zwrocKolory plansza) pozycja
-		skoki = filter (wGranicach plansza) (mozliweSkokiFigura kolor)
+		skoki = filter (wGranicach plansza) (mozliweSkokiFigura kolorPionka)
+		kolorPionka = kolorNaPozycji (zwrocPozycje plansza) pozycja
 
 		mozliweSkokiFigura :: Kolor -> [Pozycja]
-		mozliweSkokiFigura Czarny = mozliweSkokiPionek
-		mozliweSkokiFigura Bialy = mozliweSkokiPionek
-		mozliweSkokiFigura (Damka damkaKolor) = mozliweSkokiDamka
-		mozliweSkokiFigura _ = []
+		mozliweSkokiFigura kolor = case kolor of
+			(Damka _)	-> mozliweSkokiDamka
+			Brak		-> []
+			_		-> mozliweSkokiPionek
 
 		-- zwraca mozliwe pozycje skoku dla normalnego pionka
 		mozliweSkokiPionek :: [Pozycja]
 		mozliweSkokiPionek =
 			skoki where
 				skoki = filter (pustaPozycja plansza) ruchy	-- skoki na puste pozycje
-				ruchy = map (\(_, x, _) -> x) $ filter (mozeWykonacSkok kolor) mozliweSkokiKrotki
+				ruchy = map (\(_, x, _) -> x) $ filter (mozeWykonacSkok kolorPionka) mozliweSkokiKrotki
 				mozliweSkokiKrotki = zip3 przekatna1 przekatna2 pionkiNaPrzekatnej
 				przekatna1 = nPrzekatna 1 pozycja
 				przekatna2 = nPrzekatna 2 pozycja
-				pionkiNaPrzekatnej = map (kolorNaPozycji (zwrocKolory plansza)) przekatna1
+				pionkiNaPrzekatnej = map (kolorNaPozycji (zwrocPozycje plansza)) przekatna1
 
 				-- sprawdza, czy skok wykonywany jest nad pionkami przeciwnika
 				mozeWykonacSkok :: Kolor -> (Pozycja, Pozycja, Kolor) -> Bool
-				mozwWykonacSkok Brak _ = False
-				mozeWykonacSkok _ (_, _, (Damka Brak)) = False
-				mozeWykonacSkok kolor (_, _, (Damka Czarny)) = kolor /= Czarny
-				mozeWykonacSkok kolor (_, _, (Damka Bialy)) = kolor /= Bialy
-				mozeWykonacSkok kolor (_, _, Czarny) = kolor /= Czarny
-				mozeWykonacSkok kolor (_, _, Bialy) = kolor /= Bialy
-				mozeWykonacSkok _ _ = False
+				mozeWykonacSkok kolorSkaczacego kolorZbijanego = case (kolorSkaczacego, kolorZbijanego) of
+					(Brak, _)						-> False
+					(_, (_, _, (Damka Brak)))				-> False
+					(_, (_, _, Brak))					-> False
+					(kolorSkaczacego, (_, _, (Damka kolorZbijanego)))	-> kolorSkaczacego /= kolorZbijanego
+					(kolorSkaczacego, (_, _, kolorZbijanego)) 		-> kolorSkaczacego /= kolorZbijanego
+
 
 		-- zwraca mozliwe pozycje skoku dla damki
 		mozliweSkokiDamka :: [Pozycja]
 		mozliweSkokiDamka =
-			map (\(_, x, _) -> x) skoki where
-				skoki = filter (mozeWykonacSkok kolor) mozliweSkokiKrotki
-				mozliweSkokiKrotki = zip3 przekatna1 przekatna2 pionkiNaPrzekatnej
-				przekatna1 = nPrzekatna 1 pozycja
-				przekatna2 = nPrzekatna 2 pozycja
-				pionkiNaPrzekatnej = map (kolorNaPozycji (zwrocKolory plansza)) przekatna1
-				-- sprawdza, czy skok wykonywany jest nad pionkami przeciwnika
-				mozeWykonacSkok :: Kolor -> (Pozycja, Pozycja, Kolor) -> Bool
-				mozwWykonacSkok Brak _ = False
-				mozeWykonacSkok _ (_, _, (Damka Brak)) = False
-				mozeWykonacSkok kolor (_, _, (Damka Czarny)) = kolor /= Czarny
-				mozeWykonacSkok kolor (_, _, (Damka Bialy)) = kolor /= Bialy
-				mozeWykonacSkok kolor (_, _, Czarny) = kolor /= Czarny
-				mozeWykonacSkok kolor (_, _, Bialy) = kolor /= Bialy
-				mozeWykonacSkok _ _ = False
+			skoki where
+				skoki = pozycjeTegoSamegoKoloru
+				--skoki = filter (pustaPozycja plansza) (foldr (\p -> (delete p)) ruchy pozycjeDoUsuniecia)
+				ruchy = foldr (\p -> (++) (nPrzekatna p pozycja)) [] [1..szerokosc]
+				pozycjePionkow = filterNot (pustaPozycja plansza) ruchy where
+					filterNot predykat = filter $ not . predykat
+				pozycjeTegoSamegoKoloru = filter (\p -> (kolorNaPozycji (zwrocPozycje plansza) p) == kolorPionka) pozycjePionkow
+				pozycjePrzeciwnegoKoloru = foldr (\p -> (delete p)) pozycjePionkow pozycjeTegoSamegoKoloru
+				pozycjeZaPrzeciwnymKolorem = foldr (\p -> (++) (zaPionkiem pozycja (jednaPozycjaDalej pozycja p))) [] pozycjePrzeciwnegoKoloru
+				pozycjeDoUsuniecia = (foldr (\p -> (++) (zaPionkiem pozycja p)) [] pozycjeTegoSamegoKoloru) ++ pozycjeTegoSamegoKoloru ++ pozycjeZaPrzeciwnymKolorem
 
 		-- zwraca pozycje oddalone n pol od podanej pozycji
 		nPrzekatna :: Int -> Pozycja -> [Pozycja]
 		nPrzekatna n (wiersz, kolumna) =
 			[(wiersz+n, kolumna+n), (wiersz-n, kolumna-n), (wiersz+n, kolumna-n), (wiersz-n, kolumna+n)]
+
+		-- zwraca pozycje znajdujace sie za zadana pozycja
+		zaPionkiem :: Pozycja -> Pozycja -> [Pozycja]
+		zaPionkiem aktualnaPozycja pozycjaPionka =
+			pozycjeZa where
+				pozycjeZa = filter (naJednejProstej aktualnaPozycja pozycjaPionka) (foldr (\p -> (++) (nPrzekatna p pozycjaPionka)) [] [1..szerokosc])
+
+				-- sprawdza, czy pionki znajduja sie na jednej przekatnej i czy pozycja znajduje sie za zadana
+				naJednejProstej :: Pozycja -> Pozycja -> Pozycja -> Bool
+				naJednejProstej aktualnaPozycja@(x1, y1) pozycjaPionka@(x2, y2) testowanaPozycja@(x3, y3) =
+					((abs (x1-x3)) == (abs (y1-y3))) && ((roznicaWierszy > 0) && (roznicaKolumn > 0)) where
+						roznicaWierszy = if x1 < x2
+							then (x3-x2)
+							else (x2-x3)
+						roznicaKolumn = if y1 < y2
+							then (y3-y2)
+							else (y2-y3)
+
+		-- zwraca o jedna pozycje dalej wgledem drugiego argumentu, dwa pierwsze argumenty znajduja sie na jednej prostej
+		jednaPozycjaDalej :: Pozycja -> Pozycja -> Pozycja
+		jednaPozycjaDalej aktualnaPozycja@(x1, y1) pozycjaPionka@(x2, y2) =
+			(x2+roznicaWierszy, y2+roznicaKolumn) where
+				roznicaWierszy = if y1 < y2
+					then 1
+					else -1
+				roznicaKolumn = if x1 < x2
+					then 1
+					else -1					
 
 pokazSkoki :: Gra -> [Ruch]
 pokazSkoki (Gra stan@(StanGry plansza _) _) =
@@ -211,11 +218,11 @@ pokazSkoki (Gra stan@(StanGry plansza _) _) =
 		pokazSkokiHelper (StanGry plansza@(Plansza rozmiar pozycje) gracz) pozycja =
 			if (kolorPasuje gracz kolor)
 				then map (Ruch pozycja) (skok plansza pozycja)
-			else [] 
-			where
+			else [] where
 				-- sprawdza, czy gracz ma ten sam kolor
 				kolorPasuje :: Gracz -> Kolor -> Bool
-				kolorPasuje (Gracz kolorGracza) kolorPozycji = (podstawowyKolor kolorGracza) == (podstawowyKolor kolorPozycji)
+				kolorPasuje (Gracz kolorGracza) kolorPozycji =
+					(podstawowyKolor kolorGracza) == (podstawowyKolor kolorPozycji)
 				kolor = kolorNaPozycji pozycje pozycja
 
 pokazProsteRuchy :: Gra -> [Ruch]
@@ -228,14 +235,12 @@ pokazProsteRuchy (Gra stan@(StanGry plansza _) _) =
 		pokazProsteRuchyHelper (StanGry plansza@(Plansza rozmiar pozycje) gracz) pozycja =
 			if (kolorPasuje gracz kolor)
 				then map (Ruch pozycja) (prostyRuch plansza pozycja)
-			else [] 
-			where
+			else [] where
 				-- sprawdza, czy gracz ma ten sam kolor
 				kolorPasuje :: Gracz -> Kolor -> Bool
-				kolorPasuje (Gracz kolorGracza) kolorPozycji = (podstawowyKolor kolorGracza) == (podstawowyKolor kolorPozycji)
+				kolorPasuje (Gracz kolorGracza) kolorPozycji =
+					(podstawowyKolor kolorGracza) == (podstawowyKolor kolorPozycji)
 				kolor = kolorNaPozycji pozycje pozycja
-
-
 
 wykonajRuch :: Gra -> Ruch -> Gra
 wykonajRuch (Gra aktualnyStan gracze) ruch@(Ruch staraPozycja nowaPozycja) =
@@ -248,11 +253,12 @@ wykonajRuch (Gra aktualnyStan gracze) ruch@(Ruch staraPozycja nowaPozycja) =
 		stan3 = if czyDamka (zwrocKolorStanu stan2 nowaPozycja) nowaPozycja
 			then zamienNaDamke stan2 nowaPozycja
 			else stan2
+
 		-- aktualizuje stan gry wraz z wykonaniem ruchu
 		aktualizujStan :: StanGry -> Pozycja -> Pozycja -> StanGry
 		aktualizujStan (StanGry staraPlansza poprzedniGracz) staraPozycja nowaPozycja =
 			(StanGry nowaPlansza nastepnyGracz) where
-				poprzedniKolor = kolorNaPozycji (zwrocKolory staraPlansza) staraPozycja
+				poprzedniKolor = kolorNaPozycji (zwrocPozycje staraPlansza) staraPozycja
 				usunietaPozycja = aktualizujPlansze staraPlansza staraPozycja Brak
 				nowaPlansza = aktualizujPlansze usunietaPozycja nowaPozycja poprzedniKolor
 				nastepnyGracz = case poprzedniGracz of
@@ -269,22 +275,26 @@ wykonajRuch (Gra aktualnyStan gracze) ruch@(Ruch staraPozycja nowaPozycja) =
 				roznicaWierszy = if yStart < yKoniec
 					then 1
 					else -1
+
+		zwrocKolorStanu :: StanGry -> Pozycja -> Kolor
+		zwrocKolorStanu (StanGry plansza _) pozycja =
+			kolorNaPozycji (zwrocPozycje plansza) pozycja
+
 		-- zwraca prawde, jezeli ruch jest skokiem
 		sprawdzSkok :: Ruch -> Bool
 		sprawdzSkok (Ruch (_, yStart) (_, yKoniec)) =
 			roznica > 1 where
 				roznica = abs $ yStart - yKoniec
+
 		-- sprawdza, czy pionek na podanej pozycji powienien byc damka
 		czyDamka :: Kolor -> Pozycja -> Bool
-		czyDamka (Damka _) _ =
-			False
-		czyDamka Czarny (_, 8) =
-			True
-		czyDamka Bialy (_, 1) =
-			True
-		czyDamka _ _ =
-			False
-		-- zamienia pionekna podanej pozycji na damke
+		czyDamka kolor pozycja = case (kolor, pozycja) of
+			((Damka _), _)		-> False
+			(Czarny, (_, 8))	-> True
+			(Bialy, (_, 5))		-> True
+			_			-> False
+
+		-- zamienia pionek na podanej pozycji na damke
 		zamienNaDamke :: StanGry -> Pozycja -> StanGry
 		zamienNaDamke stan pozycja =
 			nowyStan where
@@ -297,44 +307,51 @@ wykonajRuch (Gra aktualnyStan gracze) ruch@(Ruch staraPozycja nowaPozycja) =
 				rozszerzonyKolor Bialy =
 					Damka Bialy
 				rozszerzonyKolor kolor = kolor
+
 		-- wymazuje wskazana pozycje
 		wymazPozycje :: StanGry -> Pozycja -> StanGry
 		wymazPozycje gra pozycja =
 			zmienPozycjeStanu gra pozycja Brak
 
-zaNieBicieTraciszZycie :: Gra -> Bool
-zaNieBicieTraciszZycie gra =
-	if (pokazSkoki gra) == []
-		then True
-	else False
+		-- zamienia dana pozycje z podanym argumentem
+		zmienPozycjeStanu :: StanGry -> Pozycja -> Kolor -> StanGry
+		zmienPozycjeStanu (StanGry staraPlansza gracz) pozycja kolor =
+			(StanGry nowaPlansza gracz) where
+				nowaPlansza = aktualizujPlansze staraPlansza pozycja kolor
 
 -------------------------------------------------------------------
 
--- ustanawia poczatkowy wyglad gry
-poczatekGry :: Gra
-poczatekGry =
-	Gra stanPoczatkowy [Gracz Czarny, Gracz Bialy] where
-		stanPoczatkowy = StanGry poczatkowaPlansza $ Gracz Bialy
+main :: IO()
+main = do
+	putStrLn "Warcaby\n"
+	graj poczatekGry where
 
-poczatkowaPlansza :: Plansza
-poczatkowaPlansza = startowaPlansza where
-	pustaPlansza = zwrocPlansze (8, 8)
-	startowaPlansza = aktualizujPozycje bialeFigury czarnePola Czarny
-	bialeFigury = aktualizujPozycje pustaPlansza bialePola Bialy
-	czarnePola = generujPozycje [1..3]
-	bialePola = generujPozycje [6..8]
-	generujPozycje wiersze = [(x, y) | x <- [1..8], y <- wiersze, or [and [even x, even y], and [odd x, odd y]]]
-	zwrocPlansze :: Rozmiar -> Plansza
-	zwrocPlansze rozmiar =
-		Plansza rozmiar (zwrocPozycjePionkow rozmiar) where
-		zwrocPozycjePionkow :: Rozmiar -> PozycjePionkow
-		zwrocPozycjePionkow (szerokosc, wysokosc) =
-			Map.fromList $ zip pozycje (repeat Brak) where
-				pozycje = [(wiersz, kolumna) | wiersz <- [1..wysokosc], kolumna <- [1..szerokosc]]
-	aktualizujPozycje :: Plansza -> [Pozycja] -> Kolor -> Plansza
-	aktualizujPozycje plansza pozycje kolor = nowaPlansza where
-		nowaPlansza = foldr funkcja plansza pozycje
-		funkcja pozycjA planszA = aktualizujPlansze planszA pozycjA kolor
+		-- ustanawia poczatkowy wyglad gry
+		poczatekGry :: Gra
+		poczatekGry =
+			Gra stanPoczatkowy [Gracz Czarny, Gracz Bialy] where
+				stanPoczatkowy = StanGry poczatkowaPlansza $ Gracz Bialy
+
+				poczatkowaPlansza :: Plansza
+				poczatkowaPlansza = startowaPlansza where
+					pustaPlansza = zwrocPlansze (8, 8)
+					startowaPlansza = aktualizujPozycje bialeFigury czarnePola Czarny
+					bialeFigury = aktualizujPozycje pustaPlansza bialePola Bialy
+					czarnePola = generujPozycje [1..3]
+					bialePola = generujPozycje [6..8]
+					generujPozycje wiersze = [(x, y) | x <- [1..8], y <- wiersze, or [and [even x, even y], and [odd x, odd y]]]
+
+					zwrocPlansze :: Rozmiar -> Plansza
+					zwrocPlansze rozmiar =
+						Plansza rozmiar (zwrocPozycjePionkow rozmiar) where
+						zwrocPozycjePionkow :: Rozmiar -> PozycjePionkow
+						zwrocPozycjePionkow (szerokosc, wysokosc) =
+							Map.fromList $ zip pozycje (repeat Brak) where
+								pozycje = [(wiersz, kolumna) | wiersz <- [1..wysokosc], kolumna <- [1..szerokosc]]
+
+					aktualizujPozycje :: Plansza -> [Pozycja] -> Kolor -> Plansza
+					aktualizujPozycje plansza pozycje kolor = nowaPlansza where
+						nowaPlansza = foldr (\p1 p2 -> aktualizujPlansze p2 p1 kolor) plansza pozycje
 
 graj :: Gra -> IO()
 graj gra =
@@ -351,6 +368,21 @@ graj gra =
 			mozliweRuchy = mozliweProsteRuchy ++ mozliweSkoki
 			czyPoprawnyRuch ruch = ruch `elem` mozliweRuchy
 			czyPoprawnySkok skok = skok `elem` mozliweSkoki
+
+			zaNieBicieTraciszZycie :: Gra -> Bool
+			zaNieBicieTraciszZycie gra =
+				if (pokazSkoki gra) == []
+					then True
+				else False
+
+			przekonwertuj :: String -> Ruch
+			przekonwertuj wejscie = case reads wejscie of
+				[(ruch, "")]	-> ruch :: Ruch		-- obluga wyjatku read'a
+				_ 		-> (Ruch (0,0) (0,0))	-- w przypadku bledu podajemy niemozliwy ruch
+
+			wykonajWczytanyRuch :: Gra -> String -> Gra
+			wykonajWczytanyRuch gra wejscie =
+				wykonajRuch gra (przekonwertuj wejscie)
 
 			kontynuuj =
 				do
@@ -386,20 +418,4 @@ graj gra =
 				do
 					putStrLn $ "Koniec gry. Stan koncowy:\n" ++ show gra
 					putStrLn $ "Wygral: " ++ show (ktoWygral gra)	++ "\n"
-
-
-przekonwertuj :: String -> Ruch
-przekonwertuj wejscie = case reads wejscie of
-	[(ruch, "")]	-> ruch :: Ruch		-- obluga wyjatku read'a
-	_ 		-> (Ruch (0,0) (0,0))	-- w przypadku bledu podajemy niemozliwy ruch
-
-wykonajWczytanyRuch :: Gra -> String -> Gra
-wykonajWczytanyRuch gra wejscie =
-	wykonajRuch gra (przekonwertuj wejscie)
-
-main :: IO()
-main =
-	do
-		putStrLn "Warcaby\n"
-		graj poczatekGry
 	
