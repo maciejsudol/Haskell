@@ -37,7 +37,7 @@ kolorChar kolor = case kolor of
 	Brak			-> "- "
 	Czarny			-> "c "
 	Bialy			-> "b "
-	Damka Czarny		-> "C "
+	Damka Czarny	-> "C "
 	Damka Bialy		-> "B "
 
 -------------------------------------------------------------------
@@ -78,6 +78,18 @@ aktualizujPlansze plansza pozycja kolor =
 		stareKolory = zwrocPozycje plansza
 		noweKolory = Map.insert pozycja kolor stareKolory
 		nowaPlansza = zamienKolory plansza noweKolory
+
+-- zwraca prawde, jezeli ruch jest skokiem
+sprawdzBicie :: Plansza -> Ruch -> Bool
+sprawdzBicie plansza (Ruch poczatek@(x1, y1) koniec@(x2, y2)) =
+	((kolorNaPozycji (zwrocPozycje plansza) zbijanaPozycja) /= (kolorNaPozycji (zwrocPozycje plansza) poczatek)) && ((kolorNaPozycji (zwrocPozycje plansza) zbijanaPozycja) /= Brak) where
+		zbijanaPozycja = (x2+roznicaWierszy, y2+roznicaKolumn)
+		roznicaWierszy = if x1 < x2
+			then -1
+			else 1
+		roznicaKolumn = if y1 < y2
+			then -1
+			else 1	
 
 koniecGry :: Gra -> Bool
 koniecGry (Gra (StanGry plansza _) _) =
@@ -121,7 +133,7 @@ prostyRuch plansza pozycja@(x,y) =
 			(Damka _)	-> mozliweProsteRuchy Czarny ++ mozliweProsteRuchy Bialy
 			Czarny 		-> [(x-1, y+1), (x+1, y+1)]
 			Bialy 		-> [(x-1, y-1), (x+1, y-1)]
-			_		-> []
+			_			-> []
 
 		prawidlowaPozycja :: Plansza -> Pozycja -> Bool
 		prawidlowaPozycja plansza pozycja =
@@ -154,23 +166,22 @@ skok plansza@(Plansza (szerokosc, wysokosc) _) pozycja =
 				-- sprawdza, czy skok wykonywany jest nad pionkami przeciwnika
 				mozeWykonacSkok :: Kolor -> (Pozycja, Pozycja, Kolor) -> Bool
 				mozeWykonacSkok kolorSkaczacego kolorZbijanego = case (kolorSkaczacego, kolorZbijanego) of
-					(Brak, _)						-> False
-					(_, (_, _, (Damka Brak)))				-> False
-					(_, (_, _, Brak))					-> False
+					(Brak, _)											-> False
+					(_, (_, _, (Damka Brak)))							-> False
+					(_, (_, _, Brak))									-> False
 					(kolorSkaczacego, (_, _, (Damka kolorZbijanego)))	-> kolorSkaczacego /= kolorZbijanego
-					(kolorSkaczacego, (_, _, kolorZbijanego)) 		-> kolorSkaczacego /= kolorZbijanego
+					(kolorSkaczacego, (_, _, kolorZbijanego)) 			-> kolorSkaczacego /= kolorZbijanego
 
 
 		-- zwraca mozliwe pozycje skoku dla damki
 		mozliweSkokiDamka :: [Pozycja]
 		mozliweSkokiDamka =
 			skoki where
-				skoki = pozycjeTegoSamegoKoloru
-				--skoki = filter (pustaPozycja plansza) (foldr (\p -> (delete p)) ruchy pozycjeDoUsuniecia)
+				skoki = filter (pustaPozycja plansza) (foldr (\p -> (delete p)) ruchy pozycjeDoUsuniecia)
 				ruchy = foldr (\p -> (++) (nPrzekatna p pozycja)) [] [1..szerokosc]
 				pozycjePionkow = filterNot (pustaPozycja plansza) ruchy where
 					filterNot predykat = filter $ not . predykat
-				pozycjeTegoSamegoKoloru = filter (\p -> (kolorNaPozycji (zwrocPozycje plansza) p) == kolorPionka) pozycjePionkow
+				pozycjeTegoSamegoKoloru = filter (\p -> ((kolorNaPozycji (zwrocPozycje plansza) p) == (podstawowyKolor kolorPionka))) pozycjePionkow
 				pozycjePrzeciwnegoKoloru = foldr (\p -> (delete p)) pozycjePionkow pozycjeTegoSamegoKoloru
 				pozycjeZaPrzeciwnymKolorem = foldr (\p -> (++) (zaPionkiem pozycja (jednaPozycjaDalej pozycja p))) [] pozycjePrzeciwnegoKoloru
 				pozycjeDoUsuniecia = (foldr (\p -> (++) (zaPionkiem pozycja p)) [] pozycjeTegoSamegoKoloru) ++ pozycjeTegoSamegoKoloru ++ pozycjeZaPrzeciwnymKolorem
@@ -243,11 +254,11 @@ pokazProsteRuchy (Gra stan@(StanGry plansza _) _) =
 				kolor = kolorNaPozycji pozycje pozycja
 
 wykonajRuch :: Gra -> Ruch -> Gra
-wykonajRuch (Gra aktualnyStan gracze) ruch@(Ruch staraPozycja nowaPozycja) =
+wykonajRuch (Gra aktualnyStan@(StanGry plansza _) gracze) ruch@(Ruch staraPozycja nowaPozycja) =
 	nowaGra where
 		nowaGra = Gra stan3 gracze
 		stan1 = aktualizujStan aktualnyStan staraPozycja nowaPozycja
-		stan2 = if sprawdzSkok ruch
+		stan2 = if sprawdzBicie plansza ruch
 			then wymazPozycje stan1 (zwrocWspolrzedneZbitegoPionka ruch)
 			else stan1
 		stan3 = if czyDamka (zwrocKolorStanu stan2 nowaPozycja) nowaPozycja
@@ -267,8 +278,8 @@ wykonajRuch (Gra aktualnyStan gracze) ruch@(Ruch staraPozycja nowaPozycja) =
 					_						-> Gracz Czarny
 		zwrocWspolrzedneZbitegoPionka :: Ruch -> Pozycja
 		zwrocWspolrzedneZbitegoPionka (Ruch (xStart, yStart) (xKoniec, yKoniec)) =
-			nowaPozycja where
-				nowaPozycja = (xStart+roznicaKolumn, yStart+roznicaWierszy)
+			zbitaPozycja where
+				zbitaPozycja = (xStart+roznicaKolumn, yStart+roznicaWierszy)
 				roznicaKolumn = if xStart < xKoniec
 					then 1
 					else -1
@@ -279,12 +290,6 @@ wykonajRuch (Gra aktualnyStan gracze) ruch@(Ruch staraPozycja nowaPozycja) =
 		zwrocKolorStanu :: StanGry -> Pozycja -> Kolor
 		zwrocKolorStanu (StanGry plansza _) pozycja =
 			kolorNaPozycji (zwrocPozycje plansza) pozycja
-
-		-- zwraca prawde, jezeli ruch jest skokiem
-		sprawdzSkok :: Ruch -> Bool
-		sprawdzSkok (Ruch (_, yStart) (_, yKoniec)) =
-			roznica > 1 where
-				roznica = abs $ yStart - yKoniec
 
 		-- sprawdza, czy pionek na podanej pozycji powienien byc damka
 		czyDamka :: Kolor -> Pozycja -> Bool
@@ -354,31 +359,30 @@ main = do
 						nowaPlansza = foldr (\p1 p2 -> aktualizujPlansze p2 p1 kolor) plansza pozycje
 
 graj :: Gra -> IO()
-graj gra =
+graj gra@(Gra (StanGry plansza _) _) =
 	do
 		if not (koniecGry gra)
 			then kontynuuj
 			else zakoncz
 		where
-			mozliweProsteRuchy = 
-				if zaNieBicieTraciszZycie gra
-					then pokazProsteRuchy gra
-				else []
-			mozliweSkoki = pokazSkoki gra
+			mozliweProsteRuchy = pokazProsteRuchy gra
+			mozliweSkoki = foldr (\p -> (delete p)) (pokazSkoki gra) mozliweProsteRuchy
+			mozliweBicia = filter (sprawdzBicie plansza) mozliweSkoki
 			mozliweRuchy = mozliweProsteRuchy ++ mozliweSkoki
 			czyPoprawnyRuch ruch = ruch `elem` mozliweRuchy
 			czyPoprawnySkok skok = skok `elem` mozliweSkoki
+			czyPoprawneBicie bicie = bicie `elem` mozliweBicia
 
 			zaNieBicieTraciszZycie :: Gra -> Bool
 			zaNieBicieTraciszZycie gra =
-				if (pokazSkoki gra) == []
+				if mozliweBicia == []
 					then True
 				else False
 
 			przekonwertuj :: String -> Ruch
 			przekonwertuj wejscie = case reads wejscie of
 				[(ruch, "")]	-> ruch :: Ruch		-- obluga wyjatku read'a
-				_ 		-> (Ruch (0,0) (0,0))	-- w przypadku bledu podajemy niemozliwy ruch
+				_ 		-> (Ruch (0,0) (0,0))		-- w przypadku bledu podajemy niemozliwy ruch
 
 			wykonajWczytanyRuch :: Gra -> String -> Gra
 			wykonajWczytanyRuch gra wejscie =
@@ -391,6 +395,7 @@ graj gra =
 					putStrLn $ "Wszystkie mozliwe ruchy:"
 					putStrLn $ "-proste ruchy:\n" ++ show mozliweProsteRuchy
 					putStrLn $ "-skoki:\n" ++ show mozliweSkoki
+					putStrLn $ "-bicia:\n" ++ show mozliweBicia
 					putStrLn $ "Podaj swoj ruch jako: \"Ruch (poczatkowyWiersz,poczatkowaKolumna) (koncowyWiersz,koncowaKolumna)\" lub \"wyjscie\" w celu zakonczenia"
 					wejscie <- getLine
 					if wejscie == "wyjscie"
@@ -400,19 +405,19 @@ graj gra =
 							then do
 								putStrLn $ "Wykonywanie ruchu " ++ wejscie
 								graj (wykonajWczytanyRuch gra wejscie)
-							else if czyPoprawnySkok (przekonwertuj wejscie)
+							else if czyPoprawneBicie (przekonwertuj wejscie)
 								then do
-									putStrLn $ "Wykonywanie skoku " ++ wejscie
+									putStrLn $ "Wykonywanie bicia " ++ wejscie
 									graj (wykonajWczytanyRuch gra wejscie)
 								else do
-									putStrLn $ "Musisz wykonac skok. " ++ wejscie ++ " nie jest poprawnym skokiem"
+									putStrLn $ "Musisz wykonac bicie. " ++ wejscie ++ " nie jest poprawnym biciem"
 									kontynuuj
 						else if zaNieBicieTraciszZycie gra
 							then do
 								putStrLn $ wejscie ++ " nie jest poprawnym ruchem"
 								kontynuuj
 							else do
-								putStrLn $ "Musisz wykonac skok. " ++ wejscie ++ " nie jest poprawnym skokiem"
+								putStrLn $ "Musisz wykonac bicie. " ++ wejscie ++ " nie jest poprawnym biciem"
 								kontynuuj
 			zakoncz =
 				do
