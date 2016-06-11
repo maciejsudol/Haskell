@@ -218,7 +218,7 @@ nPrzekatna :: Int -> Pozycja -> [Pozycja]
 nPrzekatna n (wiersz, kolumna) =
 	[(wiersz+n, kolumna+n), (wiersz-n, kolumna-n), (wiersz+n, kolumna-n), (wiersz-n, kolumna+n)]
 
-comboSkok :: Plansza -> Pozycja -> [[Pozycja]]
+comboSkok :: Plansza -> Pozycja -> [([(Pozycja, Int)], Int)]
 comboSkok plansza@(Plansza (szerokosc, wysokosc) _) pozycja =
 	comboSkokHelper plansza skoki pozycjeDoUsuniecia where
 		skoki = filter (sprawdzBiciePozycji pozycja) (skok plansza kolorPionka pozycja)
@@ -236,28 +236,38 @@ comboSkok plansza@(Plansza (szerokosc, wysokosc) _) pozycja =
 					then -1
 					else 1	
 
-		comboSkokHelper :: Plansza -> [Pozycja] -> [Pozycja] -> [[Pozycja]]
+		comboSkokHelper :: Plansza -> [Pozycja] -> [Pozycja] -> [([(Pozycja, Int)], Int)]
 		comboSkokHelper _ [] _ =
 			[]
 		comboSkokHelper plansza skoki@(head:tail) pozycjeDoUsuniecia =
-			[head:(foldr (\p -> (delete p)) (filter (sprawdzBiciePozycji head) (skok plansza kolorPionka head)) pozycjeDoUsuniecia)] ++ (comboSkokHelper plansza tail (filter (wGranicach plansza) (foldr (\p -> (++) (nPrzekatna p head)) [] [1..szerokosc])))
+			(zip [zip (head:(foldr (\p -> (delete p)) (filter (sprawdzBiciePozycji head) (skok plansza kolorPionka head)) pozycjeDoUsuniecia)) [1..]] [1..]) ++ (comboSkokHelper plansza tail (filter (wGranicach plansza) (foldr (\p -> (++) (nPrzekatna p head)) [] [1..szerokosc])))
 
 pokazComboSkoki :: Gra -> [Ruch]
 pokazComboSkoki (Gra stan@(StanGry plansza _) _) =
 	skoki where
-		skoki = concat $ map (pokazComboSkokiHelper stan) pozycje
+		skoki = concat $ map (pokazComboSkokiHelper stan pozycjaStartowa) pozycje
+		pozycjaStartowa = (0, 0)
 		pozycje = pozycjePlanszy plansza
 
-		pokazComboSkokiHelper :: StanGry -> Pozycja -> [Ruch]
-		pokazComboSkokiHelper (StanGry plansza@(Plansza rozmiar pozycje) gracz) pozycja =
+		pokazComboSkokiHelper :: StanGry -> Pozycja -> Pozycja -> [Ruch]
+		pokazComboSkokiHelper (StanGry plansza@(Plansza rozmiar pozycje) gracz) pozycjaStartowa pozycja =
 			if (kolorPasuje gracz kolor)
-				then map (\p -> (ComboRuch (map (Ruch (head p)) p))) (comboSkok plansza pozycja)
+				then map (\p1@(lista, licznikGlowny)-> (ComboRuch (map (\p2@(aktualnaPozycja, licznikPoboczny) -> (Ruch (poprzedniaPozycja licznikGlowny licznikPoboczny) aktualnaPozycja)) lista))) (comboSkok plansza pozycja)
 			else [] where
 				-- sprawdza, czy gracz ma ten sam kolor
 				kolorPasuje :: Gracz -> Kolor -> Bool
 				kolorPasuje (Gracz kolorGracza) kolorPozycji =
 					(podstawowyKolor kolorGracza) == (podstawowyKolor kolorPozycji)
 				kolor = kolorNaPozycji pozycje pozycja
+
+				poprzedniaPozycja :: Int -> Int -> Pozycja
+				poprzedniaPozycja licznikGlowny licznikPoboczny =
+					if licznikPoboczny == 1
+						then pozycjaStartowa
+					else poprzedniaPozycja where
+						comboRuch@(lista, _) = last (take licznikGlowny (comboSkok plansza pozycja))
+						(poprzedniRuch, _) = last (take licznikPoboczny lista)
+						--(poprzedniaPozycja, _) = last (take licznikPoboczny (last (take licznikGlowny (comboSkok plansza pozycja))))
 
 pokazSkoki :: Gra -> [Ruch]
 pokazSkoki (Gra stan@(StanGry plansza _) _) =
