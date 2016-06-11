@@ -240,13 +240,12 @@ comboSkok plansza@(Plansza (szerokosc, wysokosc) _) pozycja =
 		comboSkokHelper _ [] _ =
 			[]
 		comboSkokHelper plansza skoki@(head:tail) pozycjeDoUsuniecia =
-			(zip [zip (head:(foldr (\p -> (delete p)) (filter (sprawdzBiciePozycji head) (skok plansza kolorPionka head)) pozycjeDoUsuniecia)) [1..]] [1..]) ++ (comboSkokHelper plansza tail (filter (wGranicach plansza) (foldr (\p -> (++) (nPrzekatna p head)) [] [1..szerokosc])))
+			(zip [zip (head:(foldr (\p -> (delete p)) (filter (sprawdzBiciePozycji head) (skok plansza kolorPionka head)) pozycjeDoUsuniecia)) [0..]] [1..]) ++ (comboSkokHelper plansza tail (filter (wGranicach plansza) (foldr (\p -> (++) (nPrzekatna p head)) [] [1..szerokosc])))
 
 pokazComboSkoki :: Gra -> [Ruch]
 pokazComboSkoki (Gra stan@(StanGry plansza _) _) =
 	skoki where
-		skoki = concat $ map (pokazComboSkokiHelper stan pozycjaStartowa) pozycje
-		pozycjaStartowa = (0, 0)
+		skoki = concat $ map (\p -> (pokazComboSkokiHelper stan p p)) pozycje
 		pozycje = pozycjePlanszy plansza
 
 		pokazComboSkokiHelper :: StanGry -> Pozycja -> Pozycja -> [Ruch]
@@ -262,11 +261,11 @@ pokazComboSkoki (Gra stan@(StanGry plansza _) _) =
 
 				poprzedniaPozycja :: Int -> Int -> Pozycja
 				poprzedniaPozycja licznikGlowny licznikPoboczny =
-					if licznikPoboczny == 1
+					if licznikPoboczny == 0
 						then pozycjaStartowa
 					else poprzedniaPozycja where
 						comboRuch@(lista, _) = last (take licznikGlowny (comboSkok plansza pozycja))
-						(poprzedniRuch, _) = last (take licznikPoboczny lista)
+						(poprzedniaPozycja, _) = last (take licznikPoboczny lista)
 						--(poprzedniaPozycja, _) = last (take licznikPoboczny (last (take licznikGlowny (comboSkok plansza pozycja))))
 
 pokazSkoki :: Gra -> [Ruch]
