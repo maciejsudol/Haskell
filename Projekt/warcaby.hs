@@ -304,16 +304,33 @@ pokazProsteRuchy (Gra stan@(StanGry plansza _) _) =
 				kolor = kolorNaPozycji pozycje pozycja
 
 wykonajRuch :: Gra -> Ruch -> Gra
-wykonajRuch (Gra aktualnyStan@(StanGry plansza _) gracze) ruch@(Ruch staraPozycja nowaPozycja) =
-	nowaGra where
-		nowaGra = Gra stan3 gracze
-		stan1 = aktualizujStan aktualnyStan staraPozycja nowaPozycja
-		stan2 = if sprawdzBicie plansza ruch
-			then wymazPozycje stan1 (zwrocWspolrzedneZbitegoPionka ruch)
-			else stan1
-		stan3 = if czyDamka (zwrocKolorStanu stan2 nowaPozycja) nowaPozycja
-			then zamienNaDamke stan2 nowaPozycja
-			else stan2
+wykonajRuch (Gra aktualnyStan@(StanGry plansza _) gracze) ruch =
+	zaktualizowanaGra where
+		zaktualizowanaGra = case ruch of
+			(Ruch staraPozycja nowaPozycja)	-> normalnyRuch
+			(ComboRuch ruchy)				-> comboRuch
+
+		normalnyRuch :: Gra
+		normalnyRuch = (Gra stan3 gracze) where
+			(Ruch staraPozycja nowaPozycja) = ruch
+			stan1 = aktualizujStan aktualnyStan staraPozycja nowaPozycja
+			stan2 = if sprawdzBicie plansza ruch
+				then wymazPozycje stan1 (zwrocWspolrzedneZbitegoPionka ruch)
+				else stan1
+			stan3 = if czyDamka (zwrocKolorStanu stan2 nowaPozycja) nowaPozycja
+				then zamienNaDamke stan2 nowaPozycja
+				else stan2
+
+		comboRuch :: Gra
+		comboRuch = (Gra stan3 gracze) where
+			(ComboRuch ruchy) = ruch
+			(Ruch pozycjaStartowa _) = head ruchy
+			(Ruch _ pozycjaKoncowa) = last ruchy
+			stan1 = aktualizujStan aktualnyStan pozycjaStartowa pozycjaKoncowa
+			stan2 = foldr (\p1 p2 -> (wymazPozycje p2 (zwrocWspolrzedneZbitegoPionka p1))) stan1 ruchy
+			stan3 = if czyDamka (zwrocKolorStanu stan2 pozycjaKoncowa) pozycjaKoncowa
+				then zamienNaDamke stan2 pozycjaKoncowa
+				else stan2
 
 		-- aktualizuje stan gry wraz z wykonaniem ruchu
 		aktualizujStan :: StanGry -> Pozycja -> Pozycja -> StanGry
@@ -326,16 +343,17 @@ wykonajRuch (Gra aktualnyStan@(StanGry plansza _) gracze) ruch@(Ruch staraPozycj
 					Gracz Czarny			-> Gracz Bialy
 					Gracz (Damka Czarny)	-> Gracz Bialy
 					_						-> Gracz Czarny
+
 		zwrocWspolrzedneZbitegoPionka :: Ruch -> Pozycja
 		zwrocWspolrzedneZbitegoPionka (Ruch (xStart, yStart) (xKoniec, yKoniec)) =
 			zbitaPozycja where
-				zbitaPozycja = (xStart+roznicaKolumn, yStart+roznicaWierszy)
-				roznicaKolumn = if xStart < xKoniec
-					then 1
-					else -1
-				roznicaWierszy = if yStart < yKoniec
-					then 1
-					else -1
+				zbitaPozycja = (xKoniec+roznicaWierszy, yKoniec+roznicaKolumn)
+				roznicaWierszy = if xStart < xKoniec
+					then -1
+					else 1
+				roznicaKolumn = if yStart < yKoniec
+					then -1
+					else 1
 
 		zwrocKolorStanu :: StanGry -> Pozycja -> Kolor
 		zwrocKolorStanu (StanGry plansza _) pozycja =
@@ -448,21 +466,23 @@ graj gra@(Gra (StanGry plansza _) _) =
 			mozliweSkoki = foldr (\p -> (delete p)) (pokazSkoki gra) mozliweProsteRuchy
 			mozliweBicia = filter (sprawdzBicie plansza) mozliweSkoki
 			mozliweComboSkoki = pokazComboSkoki gra
-			mozliweRuchy = mozliweProsteRuchy ++ mozliweSkoki -- ++ mozliweComboSkoki
+			mozliweRuchy = mozliweProsteRuchy ++ mozliweSkoki
 
 			czyPoprawnyRuch ruch =
-				ruch `elem` mozliweRuchy
+				(ruch `elem` mozliweRuchy) || (ruch `elem` mozliweComboSkoki)
 			czyPoprawnySkok skok =
 				skok `elem` mozliweSkoki
 			czyPoprawneBicie bicie =
 				bicie `elem` mozliweBicia
+			czyPoprawnyComboSkok comboSkok =
+				comboSkok `elem` mozliweComboSkoki
 
 			zaNieBicieTraciszZycie :: Gra -> Bool
 			zaNieBicieTraciszZycie gra =
-				if mozliweBicia == []
+				if (mozliweBicia == []) && (mozliweComboSkoki == [])
 					then True
-				else True	-- FIXME Stub method
-				--else False
+				--else True	-- FIXME Stub method
+				else False
 
 			przekonwertuj :: String -> Ruch
 			przekonwertuj wejscie = case reads wejscie of
@@ -478,11 +498,11 @@ graj gra@(Gra (StanGry plansza _) _) =
 					putStrLn $ show gra
 
 					putStrLn $ "Wszystkie mozliwe ruchy:"
-					putStrLn $ "-proste ruchy:\n" ++ show mozliweProsteRuchy
-					putStrLn $ "-skoki:\n" ++ show mozliweSkoki
-					putStrLn $ "-bicia:\n" ++ show mozliweBicia
-					putStrLn $ "-combo skoki:\n" ++ show mozliweComboSkoki
-					putStrLn $ "Podaj swoj ruch jako: \"Ruch (poczatkowyWiersz,poczatkowaKolumna) (koncowyWiersz,koncowaKolumna)\" lub \"wyjscie\" w celu zakonczenia"
+					putStrLn $ " -proste ruchy:\n" ++ show mozliweProsteRuchy
+					putStrLn $ " -skoki:\n" ++ show mozliweSkoki
+					putStrLn $ " -bicia:\n" ++ show mozliweBicia
+					putStrLn $ " -combo skoki:\n" ++ show mozliweComboSkoki
+					putStrLn $ "Podaj swoj ruch jako: \"Ruch (poczatkowyWiersz,poczatkowaKolumna) (koncowyWiersz,koncowaKolumna)\" lub \"ComboRuch [<ruchy>]\" w przypadku combo skoku. W celu wyjscia wpisz \"wyjscie\""
 					wejscie <- getLine
 					if wejscie == "wyjscie"
 						then putStrLn "Koncze gre..."
@@ -491,22 +511,23 @@ graj gra@(Gra (StanGry plansza _) _) =
 							then do
 								putStrLn $ "Wykonywanie ruchu " ++ wejscie
 								graj (wykonajWczytanyRuch gra wejscie)
-							else if czyPoprawneBicie (przekonwertuj wejscie)
-								then do
-									putStrLn $ "Wykonywanie bicia " ++ wejscie
-									graj (wykonajWczytanyRuch gra wejscie)
-								else do
-									putStrLn $ "Musisz wykonac bicie. " ++ wejscie ++ " nie jest poprawnym biciem"
-									kontynuuj
-						else if zaNieBicieTraciszZycie gra
+						else if (czyPoprawneBicie (przekonwertuj wejscie)) || (czyPoprawnyComboSkok (przekonwertuj wejscie))
 							then do
-								putStrLn $ wejscie ++ " nie jest poprawnym ruchem"
-								kontynuuj
+								putStrLn $ "Wykonywanie bicia/combo skoku " ++ wejscie
+								graj (wykonajWczytanyRuch gra wejscie)
 							else do
-								putStrLn $ "Musisz wykonac bicie. " ++ wejscie ++ " nie jest poprawnym biciem"
+								putStrLn $ "Musisz wykonac bicie lub combo skok. Wejsciee: " ++ wejscie ++ " nie jest poprawne"
 								kontynuuj
+					else if zaNieBicieTraciszZycie gra
+						then do
+							putStrLn $ wejscie ++ " nie jest poprawnym ruchem"
+							kontynuuj
+						else do
+							putStrLn $ "Musisz wykonac bicie lub combo skok. Wejscie: " ++ wejscie ++ " nie jest poprawne"
+							kontynuuj
+
 			zakoncz =
 				do
-					putStrLn $ "Koniec gry. Stan koncowy:\n" ++ show gra
-					putStrLn $ "Wygral: " ++ show (ktoWygral gra)	++ "\n"
+					putStrLn $ "Koniec gry!!!\n" ++ show gra
+					putStrLn $ "Wygral " ++ show (ktoWygral gra) ++ "\n"
 	
