@@ -1,5 +1,5 @@
 import qualified Data.Map as Map	-- importujemy map i nadajemy jej kwalifikator
-import Data.Map (Map)			-- tylko map
+import Data.Map (Map)				-- tylko map
 import Data.List
 
 -------------------------------------------------------------------
@@ -220,10 +220,12 @@ nPrzekatna n (wiersz, kolumna) =
 
 comboSkok :: Plansza -> Pozycja -> [([(Pozycja, Int)], Int)]
 comboSkok plansza@(Plansza (szerokosc, wysokosc) _) pozycja =
-	comboSkokHelper plansza skoki pozycjeDoUsuniecia where
-		skoki = filter (sprawdzBiciePozycji pozycja) (skok plansza kolorPionka pozycja)
+	comboSkoki where
+		comboSkoki = filter (\p@(pozycje, _) -> (length pozycje /= 1)) (comboSkokHelper plansza skoki pozycjeDoUsuniecia)
+		ruchy = comboSkokHelper plansza skoki pozycjeDoUsuniecia
+		skoki = foldr (\p -> (delete p)) (filter (sprawdzBiciePozycji pozycja) (skok plansza kolorPionka pozycja)) pozycjeDoUsuniecia
 		kolorPionka = kolorNaPozycji (zwrocPozycje plansza) pozycja
-		pozycjeDoUsuniecia = filter (wGranicach plansza) (foldr (\p -> (++) (nPrzekatna p pozycja)) [] [1..szerokosc])
+		pozycjeDoUsuniecia = (filter (wGranicach plansza) (foldr (\p -> (++) (nPrzekatna p pozycja)) [] [1..szerokosc]))
 
 		sprawdzBiciePozycji :: Pozycja -> Pozycja -> Bool
 		sprawdzBiciePozycji poczatek@(x1, y1) koniec@(x2, y2) =
@@ -241,6 +243,37 @@ comboSkok plansza@(Plansza (szerokosc, wysokosc) _) pozycja =
 			[]
 		comboSkokHelper plansza skoki@(head:tail) pozycjeDoUsuniecia =
 			(zip [zip (head:(foldr (\p -> (delete p)) (filter (sprawdzBiciePozycji head) (skok plansza kolorPionka head)) pozycjeDoUsuniecia)) [0..]] [1..]) ++ (comboSkokHelper plansza tail (filter (wGranicach plansza) (foldr (\p -> (++) (nPrzekatna p head)) [] [1..szerokosc])))
+
+zasugeruj :: Gra -> Ruch
+zasugeruj gra@(Gra (StanGry plansza _) _) =
+	najlepszyRuch where
+		(najlepszyRuch, _) = head najlepszeRuchy
+		wszystkieMozliweRuchy = mozliweRuchy gra
+		sumyBic = zasugerujHelper gra wszystkieMozliweRuchy 3
+		krotki = zip wszystkieMozliweRuchy sumyBic
+		najlepszeRuchy = filter (\p@(ruch, suma) -> (suma == (maximum sumyBic))) krotki
+
+		mozliweRuchy :: Gra -> [Ruch]
+		mozliweRuchy gra =
+			wszystkieMozliweRuchy where
+			wszystkieMozliweRuchy = mozliweProsteRuchy ++ mozliweSkoki ++ mozliweComboSkoki
+			mozliweProsteRuchy = pokazProsteRuchy gra
+			mozliweSkoki = foldr (\p -> (delete p)) (pokazSkoki gra) (mozliweProsteRuchy ++ mozliweBicia)
+			mozliweBicia = filter (sprawdzBicie plansza) (foldr (\p -> (delete p)) (pokazSkoki gra) (mozliweProsteRuchy))
+			mozliweComboSkoki = pokazComboSkoki gra
+
+		zasugerujHelper :: Gra -> [Ruch] -> Int -> [Int]
+		zasugerujHelper _ _ 0 =
+			[]
+		zasugerujHelper _ [] _ =
+			[]
+		zasugerujHelper gra (head:tail) licznik =
+			[(liczbaMozliwychBic (wykonajRuch gra head True)) + (sum (zasugerujHelper (wykonajRuch gra head True) (mozliweRuchy gra) (licznik-1)))] ++ (zasugerujHelper gra tail licznik)
+
+		liczbaMozliwychBic :: Gra -> Int
+		liczbaMozliwychBic gra@(Gra (StanGry plansza _) _) =
+			(length (filter (sprawdzBicie plansza) (foldr (\p -> (delete p)) (pokazSkoki gra) (pokazProsteRuchy gra)))) + (length (pokazComboSkoki gra))
+			
 
 pokazComboSkoki :: Gra -> [Ruch]
 pokazComboSkoki (Gra stan@(StanGry plansza _) _) =
@@ -266,7 +299,6 @@ pokazComboSkoki (Gra stan@(StanGry plansza _) _) =
 					else poprzedniaPozycja where
 						comboRuch@(lista, _) = last (take licznikGlowny (comboSkok plansza pozycja))
 						(poprzedniaPozycja, _) = last (take licznikPoboczny lista)
-						--(poprzedniaPozycja, _) = last (take licznikPoboczny (last (take licznikGlowny (comboSkok plansza pozycja))))
 
 pokazSkoki :: Gra -> [Ruch]
 pokazSkoki (Gra stan@(StanGry plansza _) _) =
@@ -303,12 +335,18 @@ pokazProsteRuchy (Gra stan@(StanGry plansza _) _) =
 					(podstawowyKolor kolorGracza) == (podstawowyKolor kolorPozycji)
 				kolor = kolorNaPozycji pozycje pozycja
 
-wykonajRuch :: Gra -> Ruch -> Gra
-wykonajRuch (Gra aktualnyStan@(StanGry plansza _) gracze) ruch =
+wykonajRuch :: Gra -> Ruch -> Bool -> Gra
+wykonajRuch (Gra aktualnyStan@(StanGry plansza _) gracze) ruch brakZmianyGracza =
 	zaktualizowanaGra where
-		zaktualizowanaGra = case ruch of
+		zaktualizowanaGra = case brakZmianyGracza of
+			False	-> zaktualizowanaGraZeZmiana
+			True	-> zaktualizowanaGraBezZmiany
+		zaktualizowanaGraZeZmiana = case ruch of
 			(Ruch staraPozycja nowaPozycja)	-> normalnyRuch
 			(ComboRuch ruchy)				-> comboRuch
+		zaktualizowanaGraBezZmiany = case ruch of
+			(Ruch staraPozycja nowaPozycja)	-> normalnyRuchBezZmiany
+			(ComboRuch ruchy)				-> comboRuchBezZmiany
 
 		normalnyRuch :: Gra
 		normalnyRuch = (Gra stan3 gracze) where
@@ -332,6 +370,28 @@ wykonajRuch (Gra aktualnyStan@(StanGry plansza _) gracze) ruch =
 				then zamienNaDamke stan2 pozycjaKoncowa
 				else stan2
 
+		normalnyRuchBezZmiany :: Gra
+		normalnyRuchBezZmiany = (Gra stan3 gracze) where
+			(Ruch staraPozycja nowaPozycja) = ruch
+			stan1 = aktualizujStanBezZmiany aktualnyStan staraPozycja nowaPozycja
+			stan2 = if sprawdzBicie plansza ruch
+				then wymazPozycje stan1 (zwrocWspolrzedneZbitegoPionka ruch)
+				else stan1
+			stan3 = if czyDamka (zwrocKolorStanu stan2 nowaPozycja) nowaPozycja
+				then zamienNaDamke stan2 nowaPozycja
+				else stan2
+
+		comboRuchBezZmiany :: Gra
+		comboRuchBezZmiany = (Gra stan3 gracze) where
+			(ComboRuch ruchy) = ruch
+			(Ruch pozycjaStartowa _) = head ruchy
+			(Ruch _ pozycjaKoncowa) = last ruchy
+			stan1 = aktualizujStanBezZmiany aktualnyStan pozycjaStartowa pozycjaKoncowa
+			stan2 = foldr (\p1 p2 -> (wymazPozycje p2 (zwrocWspolrzedneZbitegoPionka p1))) stan1 ruchy
+			stan3 = if czyDamka (zwrocKolorStanu stan2 pozycjaKoncowa) pozycjaKoncowa
+				then zamienNaDamke stan2 pozycjaKoncowa
+				else stan2
+
 		-- aktualizuje stan gry wraz z wykonaniem ruchu
 		aktualizujStan :: StanGry -> Pozycja -> Pozycja -> StanGry
 		aktualizujStan (StanGry staraPlansza poprzedniGracz) staraPozycja nowaPozycja =
@@ -343,6 +403,14 @@ wykonajRuch (Gra aktualnyStan@(StanGry plansza _) gracze) ruch =
 					Gracz Czarny			-> Gracz Bialy
 					Gracz (Damka Czarny)	-> Gracz Bialy
 					_						-> Gracz Czarny
+
+		-- nie zmienia gracza wraz z wykonaniem ruchu
+		aktualizujStanBezZmiany :: StanGry -> Pozycja -> Pozycja -> StanGry
+		aktualizujStanBezZmiany (StanGry staraPlansza poprzedniGracz) staraPozycja nowaPozycja =
+			(StanGry nowaPlansza poprzedniGracz) where
+				poprzedniKolor = kolorNaPozycji (zwrocPozycje staraPlansza) staraPozycja
+				usunietaPozycja = aktualizujPlansze staraPlansza staraPozycja Brak
+				nowaPlansza = aktualizujPlansze usunietaPozycja nowaPozycja poprzedniKolor
 
 		zwrocWspolrzedneZbitegoPionka :: Ruch -> Pozycja
 		zwrocWspolrzedneZbitegoPionka (Ruch (xStart, yStart) (xKoniec, yKoniec)) =
@@ -364,8 +432,8 @@ wykonajRuch (Gra aktualnyStan@(StanGry plansza _) gracze) ruch =
 		czyDamka kolor pozycja = case (kolor, pozycja) of
 			((Damka _), _)		-> False
 			(Czarny, (_, 8))	-> True
-			(Bialy, (_, 5))		-> True		-- FIXME stub method
-			_			-> False
+			(Bialy, (_, 1))		-> True
+			_					-> False
 
 		-- zamienia pionek na podanej pozycji na damke
 		zamienNaDamke :: StanGry -> Pozycja -> StanGry
@@ -397,7 +465,7 @@ wykonajRuch (Gra aktualnyStan@(StanGry plansza _) gracze) ruch =
 main :: IO()
 main = do
 	putStrLn "Warcaby\n"
-	graj stub where -- FIXME poczatekGry
+	graj poczatekGry where
 
 		-- ustanawia poczatkowy wyglad gry
 		poczatekGry :: Gra
@@ -427,34 +495,6 @@ main = do
 					aktualizujPozycje plansza pozycje kolor = nowaPlansza where
 						nowaPlansza = foldr (\p1 p2 -> aktualizujPlansze p2 p1 kolor) plansza pozycje
 
-		-- ustanawia poczatkowy wyglad gry
-		stub :: Gra
-		stub =
-			Gra stanPoczatkowy [Gracz Czarny, Gracz Bialy] where
-				stanPoczatkowy = StanGry poczatkowaPlansza $ Gracz Bialy
-
-				poczatkowaPlansza :: Plansza
-				poczatkowaPlansza = startowaPlansza where
-					pustaPlansza = zwrocPlansze (8, 8)
-					startowaPlansza = aktualizujPozycje bialeFigury czarnePola Czarny
-					bialeFigury = aktualizujPozycje pustaPlansza bialePola Bialy
-					czarnePola = generujPozycje2 [3]
-					bialePola = generujPozycje [6..8]
-					generujPozycje2 wiersze = [(x, y) | x <- [2..8], y <- wiersze, or [and [even x, even y], and [odd x, odd y]]]
-					generujPozycje wiersze = [(x, y) | x <- [1..8], y <- wiersze, or [and [even x, even y], and [odd x, odd y]]]
-
-					zwrocPlansze :: Rozmiar -> Plansza
-					zwrocPlansze rozmiar =
-						Plansza rozmiar (zwrocPozycjePionkow rozmiar) where
-						zwrocPozycjePionkow :: Rozmiar -> PozycjePionkow
-						zwrocPozycjePionkow (szerokosc, wysokosc) =
-							Map.fromList $ zip pozycje (repeat Brak) where
-								pozycje = [(wiersz, kolumna) | wiersz <- [1..wysokosc], kolumna <- [1..szerokosc]]
-
-					aktualizujPozycje :: Plansza -> [Pozycja] -> Kolor -> Plansza
-					aktualizujPozycje plansza pozycje kolor = nowaPlansza where
-						nowaPlansza = foldr (\p1 p2 -> aktualizujPlansze p2 p1 kolor) plansza pozycje
-
 graj :: Gra -> IO()
 graj gra@(Gra (StanGry plansza _) _) =
 	do
@@ -463,13 +503,13 @@ graj gra@(Gra (StanGry plansza _) _) =
 			else zakoncz
 		where
 			mozliweProsteRuchy = pokazProsteRuchy gra
-			mozliweSkoki = foldr (\p -> (delete p)) (pokazSkoki gra) mozliweProsteRuchy
-			mozliweBicia = filter (sprawdzBicie plansza) mozliweSkoki
+			mozliweSkoki = foldr (\p -> (delete p)) (pokazSkoki gra) (mozliweProsteRuchy ++ mozliweBicia)
+			mozliweBicia = filter (sprawdzBicie plansza) (foldr (\p -> (delete p)) (pokazSkoki gra) (mozliweProsteRuchy))
 			mozliweComboSkoki = pokazComboSkoki gra
-			mozliweRuchy = mozliweProsteRuchy ++ mozliweSkoki
+			mozliweRuchy = mozliweProsteRuchy ++ mozliweSkoki ++ mozliweBicia ++ mozliweComboSkoki
 
 			czyPoprawnyRuch ruch =
-				(ruch `elem` mozliweRuchy) || (ruch `elem` mozliweComboSkoki)
+				ruch `elem` mozliweRuchy
 			czyPoprawnySkok skok =
 				skok `elem` mozliweSkoki
 			czyPoprawneBicie bicie =
@@ -481,7 +521,6 @@ graj gra@(Gra (StanGry plansza _) _) =
 			zaNieBicieTraciszZycie gra =
 				if (mozliweBicia == []) && (mozliweComboSkoki == [])
 					then True
-				--else True	-- FIXME Stub method
 				else False
 
 			przekonwertuj :: String -> Ruch
@@ -491,7 +530,7 @@ graj gra@(Gra (StanGry plansza _) _) =
 
 			wykonajWczytanyRuch :: Gra -> String -> Gra
 			wykonajWczytanyRuch gra wejscie =
-				wykonajRuch gra (przekonwertuj wejscie)
+				wykonajRuch gra (przekonwertuj wejscie) False
 
 			kontynuuj =
 				do
@@ -502,6 +541,10 @@ graj gra@(Gra (StanGry plansza _) _) =
 					putStrLn $ " -skoki:\n" ++ show mozliweSkoki
 					putStrLn $ " -bicia:\n" ++ show mozliweBicia
 					putStrLn $ " -combo skoki:\n" ++ show mozliweComboSkoki
+					putStrLn $ " -sugerowany najlepszy ruch:\n" ++ 
+						if (length mozliweBicia /= 0) || (length mozliweComboSkoki /= 0)
+							then "Musisz wykonac bicie"
+						else show (zasugeruj gra)
 					putStrLn $ "Podaj swoj ruch jako: \"Ruch (poczatkowyWiersz,poczatkowaKolumna) (koncowyWiersz,koncowaKolumna)\" lub \"ComboRuch [<ruchy>]\" w przypadku combo skoku. W celu wyjscia wpisz \"wyjscie\""
 					wejscie <- getLine
 					if wejscie == "wyjscie"
@@ -516,7 +559,7 @@ graj gra@(Gra (StanGry plansza _) _) =
 								putStrLn $ "Wykonywanie bicia/combo skoku " ++ wejscie
 								graj (wykonajWczytanyRuch gra wejscie)
 							else do
-								putStrLn $ "Musisz wykonac bicie lub combo skok. Wejsciee: " ++ wejscie ++ " nie jest poprawne"
+								putStrLn $ "Musisz wykonac bicie lub combo skok. Wejscie: " ++ wejscie ++ " nie jest poprawne"
 								kontynuuj
 					else if zaNieBicieTraciszZycie gra
 						then do
