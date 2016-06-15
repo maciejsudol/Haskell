@@ -9,7 +9,9 @@ data Gra = Gra StanGry [Gracz] deriving (Show, Eq)
 data Plansza = Plansza Rozmiar PozycjePionkow deriving (Eq)
 data StanGry = StanGry Plansza Gracz deriving (Show, Eq)
 data Kolor = Brak | Czarny | Bialy | Damka Kolor deriving (Show, Eq)
-data Ruch = Ruch Pozycja Pozycja | ComboRuch [Ruch] deriving (Show, Eq, Read)
+data Ruch = Ruch Pozycja Pozycja | ComboRuch [Ruch] | BrakRuchu deriving (Show, Eq, Read)
+-- StanGry po wykonanym Ruchu, Int - liczba okreslajaca aktulnego stanu gry
+data DrzewoGry = DrzewoGry StanGry Ruch Int [DrzewoGry]
 
 type Rozmiar = (Int, Int)
 type Pozycja = (Int, Int)
@@ -284,35 +286,71 @@ comboSkok plansza@(Plansza (szerokosc, wysokosc) _) pozycja =
 		comboSkokHelper plansza skoki@(head:tail) pozycjeDoUsuniecia =
 			(zip [zip (head:(foldr (\p -> (delete p)) (filter (sprawdzBiciePozycji head) (skok plansza kolorPionka head)) pozycjeDoUsuniecia)) [0..]] [1..]) ++ (comboSkokHelper plansza tail (filter (wGranicach plansza) (foldr (\p -> (++) (nPrzekatna p head)) [] [1..szerokosc])))
 
-zasugeruj :: Gra -> Ruch
-zasugeruj gra@(Gra (StanGry plansza _) _) =
-	najlepszyRuch where
-		(najlepszyRuch, _) = head najlepszeRuchy
-		wszystkieMozliweRuchy = mozliweRuchy gra
-		sumyBic = zasugerujHelper gra wszystkieMozliweRuchy 3
-		krotki = zip wszystkieMozliweRuchy sumyBic
-		najlepszeRuchy = filter (\p@(ruch, suma) -> (suma == (maximum sumyBic))) krotki
+-- prosty algorytm dazacy do maksymalizacji wartosci gry
+zasugeruj :: Gra -> Int -> [Ruch]
+zasugeruj gra@(Gra (StanGry _ aktualnyGracz@(Gracz kolorAktualnegoGracza)) _) glebokosc =
+	najlepszeRuchy where
+		najlepszeRuchy = map (\p@(ruch, _) -> ruch) najlepszeKrotki
+		drzewoGry = zwrocDrzewoGry gra BrakRuchu glebokosc
+		krotki = zwrocInformacjeOWartosciach drzewoGry
+		maksimum = maximum (map (\p@(_, wartosc) -> wartosc) krotki)
+		najlepszeKrotki = filter (\p@(_, wartosc) -> (wartosc == maksimum)) krotki
 
-		mozliweRuchy :: Gra -> [Ruch]
-		mozliweRuchy gra =
-			wszystkieMozliweRuchy where
-			wszystkieMozliweRuchy = mozliweProsteRuchy ++ mozliweSkoki ++ mozliweComboSkoki
-			mozliweProsteRuchy = pokazProsteRuchy gra
-			mozliweSkoki = foldr (\p -> (delete p)) (pokazSkoki gra) (mozliweProsteRuchy ++ mozliweBicia)
-			mozliweBicia = filter (sprawdzBicie plansza) (foldr (\p -> (delete p)) (pokazSkoki gra) (mozliweProsteRuchy))
-			mozliweComboSkoki = pokazComboSkoki gra
+		zwrocDrzewoGry :: Gra -> Ruch -> Int -> DrzewoGry
+		zwrocDrzewoGry (Gra stan@(StanGry plansza gracz) _) ruch 0 =
+			if gracz == aktualnyGracz
+				then DrzewoGry stan ruch (wartosciujGre gra) []
+			else DrzewoGry stan BrakRuchu 0 []
+		zwrocDrzewoGry gra@(Gra stan@(StanGry plansza gracz) _) ruch poziom =
+			if gracz == aktualnyGracz
+				then (DrzewoGry stan ruch (wartosciujGre gra) (map (\p -> (zwrocDrzewoGry (wykonajRuch gra p False) p (poziom-1))) (mozliweRuchy gra)))
+			else (DrzewoGry stan ruch 0 (map (\p -> (zwrocDrzewoGry (wykonajRuch gra p False) BrakRuchu (poziom-1))) (mozliweRuchy gra)))
 
-		zasugerujHelper :: Gra -> [Ruch] -> Int -> [Int]
-		zasugerujHelper _ _ 0 =
-			[]
-		zasugerujHelper _ [] _ =
-			[]
-		zasugerujHelper gra (head:tail) licznik =
-			[(liczbaMozliwychBic (wykonajRuch gra head True)) + (sum (zasugerujHelper (wykonajRuch gra head True) (mozliweRuchy gra) (licznik-1)))] ++ (zasugerujHelper gra tail licznik)
+		wartosciujGre :: Gra -> Int
+		wartosciujGre gra@(Gra (StanGry plansza _) _) =
+			wartosc where
+				wartosc = sum (map wartosciujPionek pionki)
+				pionki = map (kolorNaPozycji (zwrocPozycje plansza)) (pozycjePlanszy plansza)
 
-		liczbaMozliwychBic :: Gra -> Int
-		liczbaMozliwychBic gra@(Gra (StanGry plansza _) _) =
-			(length (filter (sprawdzBicie plansza) (foldr (\p -> (delete p)) (pokazSkoki gra) (pokazProsteRuchy gra)))) + (length (pokazComboSkoki gra))
+		wartosciujPionek :: Kolor -> Int
+		wartosciujPionek kolor =
+			if kolorAktualnegoGracza == Czarny
+				then case kolor of
+					Damka Czarny	-> 200
+					Damka Bialy		-> -200
+					Czarny			-> 20
+					Bialy			-> -20
+					Brak			-> 0
+			else case kolor of
+					Damka Bialy		-> 200
+					Damka Czarny	-> -200
+					Bialy			-> 20
+					Czarny			-> -20
+					Brak			-> 0
+				
+
+		zwrocInformacjeOWartosciach :: DrzewoGry -> [(Ruch, Int)]
+		zwrocInformacjeOWartosciach (DrzewoGry _ _ _ drzewa) =
+			krotki where
+				krotki = zip ruchy sumyWartosci
+				ruchy = map zwrocRuch drzewa
+				sumyWartosci = map (\p -> (zsumujWartosci (zwrocPoddrzewa p))) drzewa
+
+				zwrocPoddrzewa :: DrzewoGry -> [DrzewoGry]
+				zwrocPoddrzewa (DrzewoGry _ _ _ drzewa) =
+					drzewa
+
+				zwrocRuch :: DrzewoGry -> Ruch
+				zwrocRuch (DrzewoGry _ ruch _ _) =
+					ruch
+
+				zsumujWartosci :: [DrzewoGry] -> Int
+				zsumujWartosci [] =
+					0
+				zsumujWartosci (head:tail) =
+					sumaWartosci where
+						sumaWartosci = wartosc + (zsumujWartosci drzewa) + (zsumujWartosci tail)
+						(DrzewoGry _ _ wartosc drzewa) = head
 
 ---Funkcje IO------------------------------------------------------
 
@@ -361,6 +399,7 @@ graj gra@(Gra (StanGry plansza _) _) =
 			mozliweBicia = filter (sprawdzBicie plansza) (foldr (\p -> (delete p)) (pokazSkoki gra) (mozliweProsteRuchy))
 			mozliweComboSkoki = pokazComboSkoki gra
 			mozliweRuchy = mozliweProsteRuchy ++ mozliweSkoki ++ mozliweBicia ++ mozliweComboSkoki
+			sugerowaneRuchy = zasugeruj gra 4
 
 			czyPoprawnyRuch ruch =
 				ruch `elem` mozliweRuchy
@@ -395,10 +434,10 @@ graj gra@(Gra (StanGry plansza _) _) =
 					putStrLn $ " -skoki:\n" ++ show mozliweSkoki
 					putStrLn $ " -bicia:\n" ++ show mozliweBicia
 					putStrLn $ " -combo skoki:\n" ++ show mozliweComboSkoki
-					putStrLn $ " -sugerowany najlepszy ruch:\n" ++ 
-						if (length mozliweBicia /= 0) || (length mozliweComboSkoki /= 0)
-							then "Musisz wykonac bicie"
-						else show (zasugeruj gra)
+					putStrLn $ " -sugerowane najlepsze ruchy:\n" ++ 
+						if (length sugerowaneRuchy) == 0
+							then "Musisz wykonac dowolne bicie"
+						else show sugerowaneRuchy
 					putStrLn $ "Podaj swoj ruch jako: \"Ruch (poczatkowyWiersz,poczatkowaKolumna) (koncowyWiersz,koncowaKolumna)\" lub \"ComboRuch [<ruchy>]\" w przypadku combo skoku. W celu wyjscia wpisz \"wyjscie\""
 					wejscie <- getLine
 					if wejscie == "wyjscie"
@@ -574,3 +613,12 @@ pokazProsteRuchy (Gra stan@(StanGry plansza _) _) =
 				kolorPasuje (Gracz kolorGracza) kolorPozycji =
 					(podstawowyKolor kolorGracza) == (podstawowyKolor kolorPozycji)
 				kolor = kolorNaPozycji pozycje pozycja
+
+mozliweRuchy :: Gra -> [Ruch]
+mozliweRuchy gra@(Gra stan@(StanGry plansza _) _) =
+	wszystkieMozliweRuchy where
+	wszystkieMozliweRuchy = mozliweProsteRuchy ++ mozliweSkoki ++ mozliweComboSkoki
+	mozliweProsteRuchy = pokazProsteRuchy gra
+	mozliweSkoki = foldr (\p -> (delete p)) (pokazSkoki gra) (mozliweProsteRuchy ++ mozliweBicia)
+	mozliweBicia = filter (sprawdzBicie plansza) (foldr (\p -> (delete p)) (pokazSkoki gra) (mozliweProsteRuchy))
+	mozliweComboSkoki = pokazComboSkoki gra
