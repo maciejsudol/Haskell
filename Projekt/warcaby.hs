@@ -306,6 +306,21 @@ zasugeruj gra@(Gra (StanGry _ aktualnyGracz@(Gracz kolorAktualnegoGracza)) _) gl
 				then (DrzewoGry stan ruch (wartosciujGre gra) (map (\p -> (zwrocDrzewoGry (wykonajRuch gra p False) p (poziom-1))) (mozliweRuchy gra)))
 			else (DrzewoGry stan ruch 0 (map (\p -> (zwrocDrzewoGry (wykonajRuch gra p False) BrakRuchu (poziom-1))) (mozliweRuchy gra)))
 
+		mozliweRuchy :: Gra -> [Ruch]
+		mozliweRuchy gra@(Gra stan@(StanGry plansza _) _) =
+			wszystkieMozliweRuchy where
+				wszystkieMozliweRuchy = 
+					if ((length mozliweComboSkoki) == 0) && ((length mozliweBicia) == 0)
+						then mozliweProsteRuchy ++ mozliweSkoki ++ mozliweBicia ++ mozliweComboSkoki
+					else
+						if (length mozliweComboSkoki) /= 0
+							then mozliweComboSkoki
+						else mozliweBicia
+				mozliweProsteRuchy = pokazProsteRuchy gra
+				mozliweSkoki = foldr (\p -> (delete p)) (pokazSkoki gra) (mozliweProsteRuchy ++ mozliweBicia)
+				mozliweBicia = filter (sprawdzBicie plansza) (foldr (\p -> (delete p)) (pokazSkoki gra) (mozliweProsteRuchy))
+				mozliweComboSkoki = pokazComboSkoki gra
+
 		wartosciujGre :: Gra -> Int
 		wartosciujGre gra@(Gra (StanGry plansza _) _) =
 			wartosc where
@@ -399,7 +414,7 @@ graj gra@(Gra (StanGry plansza _) _) =
 			mozliweBicia = filter (sprawdzBicie plansza) (foldr (\p -> (delete p)) (pokazSkoki gra) (mozliweProsteRuchy))
 			mozliweComboSkoki = pokazComboSkoki gra
 			mozliweRuchy = mozliweProsteRuchy ++ mozliweSkoki ++ mozliweBicia ++ mozliweComboSkoki
-			sugerowaneRuchy = zasugeruj gra 4
+			sugerowaneRuchy = zasugeruj gra 5
 
 			czyPoprawnyRuch ruch =
 				ruch `elem` mozliweRuchy
@@ -434,10 +449,7 @@ graj gra@(Gra (StanGry plansza _) _) =
 					putStrLn $ " -skoki:\n" ++ show mozliweSkoki
 					putStrLn $ " -bicia:\n" ++ show mozliweBicia
 					putStrLn $ " -combo skoki:\n" ++ show mozliweComboSkoki
-					putStrLn $ " -sugerowane najlepsze ruchy:\n" ++ 
-						if (length sugerowaneRuchy) == 0
-							then "Musisz wykonac dowolne bicie"
-						else show sugerowaneRuchy
+					putStrLn $ " -sugerowane najlepsze ruchy:\n" ++ show sugerowaneRuchy
 					putStrLn $ "Podaj swoj ruch jako: \"Ruch (poczatkowyWiersz,poczatkowaKolumna) (koncowyWiersz,koncowaKolumna)\" lub \"ComboRuch [<ruchy>]\" w przypadku combo skoku. W celu wyjscia wpisz \"wyjscie\""
 					wejscie <- getLine
 					if wejscie == "wyjscie"
@@ -613,12 +625,3 @@ pokazProsteRuchy (Gra stan@(StanGry plansza _) _) =
 				kolorPasuje (Gracz kolorGracza) kolorPozycji =
 					(podstawowyKolor kolorGracza) == (podstawowyKolor kolorPozycji)
 				kolor = kolorNaPozycji pozycje pozycja
-
-mozliweRuchy :: Gra -> [Ruch]
-mozliweRuchy gra@(Gra stan@(StanGry plansza _) _) =
-	wszystkieMozliweRuchy where
-	wszystkieMozliweRuchy = mozliweProsteRuchy ++ mozliweSkoki ++ mozliweComboSkoki
-	mozliweProsteRuchy = pokazProsteRuchy gra
-	mozliweSkoki = foldr (\p -> (delete p)) (pokazSkoki gra) (mozliweProsteRuchy ++ mozliweBicia)
-	mozliweBicia = filter (sprawdzBicie plansza) (foldr (\p -> (delete p)) (pokazSkoki gra) (mozliweProsteRuchy))
-	mozliweComboSkoki = pokazComboSkoki gra
