@@ -7,3 +7,5 @@ W celu skompilowania przez ghc i uruchomienia:
 	$./warcaby
 
 Proste ruchy (czyli ruchy o jedną pozycję, bicia innych pionków) wykonujemy poprzez : "Ruch (poczatkowyWiersz,poczatkowaKolumna) (koncowyWiersz,koncowaKolumna)" lub "ComboRuch [<lista ruchów, jakie należy wykonać>]".
+
+Projekt dostępny również pod adresem: https://github.com/maciejsudol/Haskell/tree/develop/Projekt
